@@ -13,7 +13,7 @@ func TestFilterUniqueSlice(t *testing.T) {
 }
 
 func TestExtractUrlsFromHtmlEmpty(t *testing.T) {
-	output := extractUrls("", "google.com")
+	output := extractUrls("")
 
 	if len(output) != 0 {
 		t.Fatalf("Output must be empty!")
@@ -21,7 +21,7 @@ func TestExtractUrlsFromHtmlEmpty(t *testing.T) {
 }
 
 func TestExtractUrlsFromHtmlNoUrlAvailable(t *testing.T) {
-	output := extractUrls("<html><title>Test without url</title></html>", "google.com")
+	output := extractUrls("<html><title>Test without url</title></html>")
 
 	if len(output) != 0 {
 		t.Fatalf("Output must be empty!")
@@ -29,7 +29,7 @@ func TestExtractUrlsFromHtmlNoUrlAvailable(t *testing.T) {
 }
 
 func TestExtractUrlsFromHtml(t *testing.T) {
-	output := extractUrls(getHtmlSourceWithUrl(), "google.com")
+	output := extractUrls(getHtmlSourceWithUrl())
 
 	if len(output) != 152 {
 		t.Fatalf("Output must not be empty!")
@@ -37,7 +37,7 @@ func TestExtractUrlsFromHtml(t *testing.T) {
 }
 
 func TestUrlsFilteredByExtension(t *testing.T) {
-	output := extractUrls(getHtmlSourceWithUrl(), "google.com")
+	output := extractUrls(getHtmlSourceWithUrl())
 	urlsFiltered := filterUrlByExtension(output, Jpg)
 
 	if len(urlsFiltered) != 145 {
