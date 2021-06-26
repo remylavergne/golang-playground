@@ -108,15 +108,12 @@ func formatUrl(rawUrl string, domain string) string {
 	}
 }
 
-func formatUrls(urls []string, domain string) []string {
-	us := []string{}
+func formatUrls(urls *[]string, domain string) {
 
-	for _, u := range urls {
+	for index, u := range *urls {
 		urlFormat := formatUrl(u, domain)
-		us = append(us, urlFormat)
+		(*urls)[index] = urlFormat
 	}
-
-	return us
 }
 
 func extractUrls(htmlSource string) []string {
@@ -144,7 +141,7 @@ func filterUrlByExtension(urls []string, fe FileExtension) []string {
 	return urlsFiltered
 }
 
-func downloadFile(client *http.Client, fileUrl string, dirPath *string, respBodyChannel *chan []byte) {
+func downloadFile(client *http.Client, fileUrl string, dirPath *string, respBodyChannel *chan []byte, wg *sync.WaitGroup) {
 	// Extract filename from path
 	fileURL, err := url.Parse(fileUrl)
 	if err != nil {
@@ -178,7 +175,7 @@ func downloadFile(client *http.Client, fileUrl string, dirPath *string, respBody
 	wg.Done()
 }
 
-func persistFile(fileUrl string, dirPath *string, respBodyChannel *chan []byte) {
+func persistFile(fileUrl string, dirPath *string, respBodyChannel *chan []byte, wg *sync.WaitGroup) {
 	fileURL, err := url.Parse(fileUrl)
 	if err != nil {
 		check(err)
@@ -237,9 +234,6 @@ func getHttpClient() *http.Client {
 	}
 }
 
-// Wait for all Goroutines launched
-var wg sync.WaitGroup = sync.WaitGroup{}
-
 var UrlArg string
 var dryRunArg bool = false
 var extensionArg FileExtension
@@ -264,8 +258,8 @@ func main() {
 
 	// Process data
 	urls := extractUrls(string(body))
-	urlsFormated := formatUrls(urls, domain) // TODO: Passer le pointeur au lieu d'une copie ?
-	urlsFiltered := filterUrlByExtension(urlsFormated, extensionArg)
+	urlsFiltered := filterUrlByExtension(urls, extensionArg)
+	formatUrls(&urlsFiltered, domain)
 	urlsUnique := unique(urlsFiltered)
 
 	if dryRunArg {
@@ -278,14 +272,18 @@ func main() {
 
 	os.Mkdir(output, 0755)
 
+	// Wait for all Goroutines launched
+	var wg sync.WaitGroup = sync.WaitGroup{}
 	respBodyChannel := make(chan []byte)
 
 	for _, url := range urlsUnique {
 
 		wg.Add(2)
-		go downloadFile(client, url, &output, &respBodyChannel)
-		go persistFile(url, &output, &respBodyChannel)
+		go downloadFile(client, url, &output, &respBodyChannel, &wg)
+		go persistFile(url, &output, &respBodyChannel, &wg)
 	}
+
 	wg.Wait()
+	close(respBodyChannel)
 	fmt.Println("Process done!")
 }
