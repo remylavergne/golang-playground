@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -202,7 +204,7 @@ func persistFile(fileUrl string, dirPath *string, respBodyChannel *chan []byte, 
 		check(err)
 	}
 
-	fmt.Printf("File %s with size %d have been downloaded\n", file.Name(), size)
+	fmt.Printf("File %s have been downloaded (size: %d)\n", file.Name(), size)
 	wg.Done()
 }
 
@@ -270,7 +272,11 @@ func main() {
 
 	fmt.Println(len(urlsUnique), "files are going to be downloaded")
 
+	dirHash := md5.Sum([]byte(UrlArg))
+	dirHashString := hex.EncodeToString(dirHash[:])
 	os.Mkdir(output, 0755)
+	outputDir := output + "/" + dirHashString
+	os.Mkdir(outputDir, 0755)
 
 	// Wait for all Goroutines launched
 	var wg sync.WaitGroup = sync.WaitGroup{}
@@ -279,8 +285,8 @@ func main() {
 	for _, url := range urlsUnique {
 
 		wg.Add(2)
-		go downloadFile(client, url, &output, &respBodyChannel, &wg)
-		go persistFile(url, &output, &respBodyChannel, &wg)
+		go downloadFile(client, url, &outputDir, &respBodyChannel, &wg)
+		go persistFile(url, &outputDir, &respBodyChannel, &wg)
 	}
 
 	wg.Wait()
