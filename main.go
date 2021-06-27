@@ -206,7 +206,7 @@ func persistFile(fileUrl string, dirPath *string, respBodyChannel *chan []byte) 
 		check(err)
 	}
 
-	fmt.Printf("File %s have been downloaded (size: %d)\n", file.Name(), size)
+	fmt.Printf("Downloaded a file %s with size %d\n", file.Name(), size)
 	wg.Done()
 }
 
