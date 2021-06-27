@@ -151,7 +151,6 @@ func downloadFile(client *http.Client, fileUrl string, dirPath *string, respBody
 	}
 	path := fileURL.Path
 	segments := strings.Split(path, "/")
-
 	fileName := segments[len(segments)-1]
 
 	// Create blank file
@@ -274,8 +273,8 @@ func main() {
 
 	dirHash := md5.Sum([]byte(UrlArg))
 	dirHashString := hex.EncodeToString(dirHash[:])
-	os.Mkdir(output, 0755)
 	outputDir := output + "/" + dirHashString
+	os.Mkdir(output, 0755)
 	os.Mkdir(outputDir, 0755)
 
 	// Wait for all Goroutines launched
