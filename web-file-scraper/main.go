@@ -18,6 +18,7 @@ import (
 
 // TODO: Test main url validity
 // TODO: Extract links from a file -> new arg & behavior
+// TODO: Fix windows path copy
 
 func check(e error) {
 	if e != nil {
@@ -146,7 +147,9 @@ func filterUrlByExtension(urls []string, fe FileExtension) []string {
 	return urlsFiltered
 }
 
-func downloadFile(client *http.Client, fileUrl string, dirPath *string, respBodyChannel *chan []byte) {
+func downloadFile(client *http.Client, fileUrl string, dirPath string, respBodyChannel chan []byte, wg *sync.WaitGroup) {
+	defer (*&wg).Done()
+
 	// Extract filename from path
 	fileURL, err := url.Parse(fileUrl)
 	if err != nil {
@@ -157,29 +160,39 @@ func downloadFile(client *http.Client, fileUrl string, dirPath *string, respBody
 	fileName := segments[len(segments)-1]
 
 	// Create blank file
-	file, err := os.Create(*dirPath + "/" + fileName)
+	file, err := os.Create(dirPath + "/" + fileName)
 	if err != nil {
 		check(err)
 	}
 	defer file.Close()
 
 	// Put content on file
-	resp, err := client.Get(fileUrl)
+	resp, err := http.Get(fileUrl)
 	if err != nil {
-		check(err)
+		fmt.Println("Unable to download", fileURL)
+		respBodyChannel <- make([]byte, 0)
+	} else {
+		// Read response & send it through channel
+		body, error := ioutil.ReadAll(resp.Body)
+		check(error)
+
+		respBodyChannel <- body
 	}
 
-	// Read response & send it through channel
-	body, error := ioutil.ReadAll(resp.Body)
-	check(error)
-	resp.Body.Close()
-
-	*respBodyChannel <- body
-
-	wg.Done()
+	defer resp.Body.Close()
 }
 
-func persistFile(fileUrl string, dirPath *string, respBodyChannel *chan []byte) {
+func persistFile(fileUrl string, dirPath string, respBodyChannel chan []byte, wg *sync.WaitGroup) {
+	defer (*wg).Done()
+
+	// Get file data through channel
+	byteBody := <-respBodyChannel
+	if len(byteBody) == 0 {
+		fmt.Println("Body is empty. Skip file creation.")
+		return
+	}
+	r := bytes.NewReader(byteBody)
+
 	fileURL, err := url.Parse(fileUrl)
 	if err != nil {
 		check(err)
@@ -189,15 +202,11 @@ func persistFile(fileUrl string, dirPath *string, respBodyChannel *chan []byte) 
 	fileName := segments[len(segments)-1]
 
 	// Create blank file
-	file, err := os.Create(*dirPath + "/" + fileName)
+	file, err := os.Create(dirPath + "/" + fileName)
 	if err != nil {
 		check(err)
 	}
 	defer file.Close()
-
-	// Get file data through channel
-	byteBody := <-*respBodyChannel
-	r := bytes.NewReader(byteBody)
 
 	// Write data into file
 	size, err := io.Copy(file, r)
@@ -206,8 +215,7 @@ func persistFile(fileUrl string, dirPath *string, respBodyChannel *chan []byte) 
 		check(err)
 	}
 
-	fmt.Printf("Downloaded a file %s with size %d\n", file.Name(), size)
-	wg.Done()
+	fmt.Printf("File %s downloaded (size: %d)\n", file.Name(), size)
 }
 
 func unique(stringSlice []string) []string {
@@ -238,9 +246,6 @@ func getHttpClient() *http.Client {
 	}
 }
 
-// Wait for all Goroutines launched
-var wg sync.WaitGroup = sync.WaitGroup{}
-
 var UrlArg string
 var dryRunArg bool = false
 var extensionArg FileExtension
@@ -265,7 +270,7 @@ func main() {
 
 	// Process data
 	urls := extractUrls(string(body))
-	urlsFormated := formatUrls(urls, domain) // TODO: Passer le pointeur au lieu d'une copie ?
+	urlsFormated := formatUrls(urls, domain)
 	urlsFiltered := filterUrlByExtension(urlsFormated, extensionArg)
 	urlsUnique := unique(urlsFiltered)
 
@@ -284,12 +289,13 @@ func main() {
 	os.Mkdir(outputDir, 0755)
 
 	respBodyChannel := make(chan []byte)
+	// Wait for all Goroutines launched
+	var wg sync.WaitGroup = sync.WaitGroup{}
+	wg.Add(len(urlsUnique) * 2)
 
 	for _, url := range urlsUnique {
-
-		wg.Add(2)
-		go downloadFile(client, url, &output, &respBodyChannel)
-		go persistFile(url, &output, &respBodyChannel)
+		go downloadFile(client, url, outputDir, respBodyChannel, &wg)
+		go persistFile(url, outputDir, respBodyChannel, &wg)
 	}
 	wg.Wait()
 	fmt.Println("Process done!")
