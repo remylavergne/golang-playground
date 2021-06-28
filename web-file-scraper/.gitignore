@@ -1,0 +1,4 @@
+*.webm
+.DS_Store
+*.out
+output
